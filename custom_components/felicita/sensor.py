@@ -13,10 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from pyfelicita_async.const import BATTERY_LEVEL, OUNCE, UNITS, WEIGHT
-
-from .const import DOMAIN
-
+from .const import DOMAIN, BATTERY_LEVEL, OUNCE, UNITS, WEIGHT
 from .entity import FelicitaEntity, FelicitaEntityDescription
 
 

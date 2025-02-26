@@ -11,6 +11,8 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS = ["button", "sensor", "binary_sensor"]
 
+# Add this manifest constant
+PLATFORMS_PACKAGE = "custom_components.felicita"
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Felicita as config entry."""
@@ -21,7 +23,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     await coordinator.async_config_entry_first_refresh()
 
-    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+    # Update this line to use the package path
+    for platform in PLATFORMS:
+        hass.async_create_task(
+            hass.config_entries.async_forward_entry_setup(
+                config_entry, f"{PLATFORMS_PACKAGE}.{platform}"
+            )
+        )
 
     return True
 

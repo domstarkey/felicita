@@ -1,5 +1,12 @@
-"""Constants for component."""
+"""Constants for the Felicita integration."""
 DOMAIN = "felicita"
+
+# Sensor constants
+BATTERY_LEVEL = "battery_level"
+WEIGHT = "weight"
+UNITS = "units"
+OUNCE = "oz"
+
 CONF_MAC_ADDRESS = "mac_address"
 
 DEVICE_NAME = "FELICITA"

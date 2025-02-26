@@ -22,6 +22,7 @@ class FelicitaButtonDescriptionMixin:
     """Mixin to describe a Button entity."""
 
     press_action: Callable
+    unique_id_fn: Callable = lambda scale: f"{scale.mac}_{scale.key}"
 
 
 @dataclass
@@ -33,26 +34,31 @@ BUTTONS = [
     FelicitaButtonDescription(
         key="tare",
         name="Tare",
+        unique_id_fn=lambda scale: f"{scale.mac}_tare",
         press_action=lambda client: client.async_tare(),
     ),
     FelicitaButtonDescription(
         key="start_timer",
         name="Start Timer",
+        unique_id_fn=lambda scale: f"{scale.mac}_start_timer",
         press_action=lambda client: client.async_start_timer(),
     ),
     FelicitaButtonDescription(
         key="stop_timer",
         name="Stop Timer",
+        unique_id_fn=lambda scale: f"{scale.mac}_stop_timer",
         press_action=lambda client: client.async_stop_timer(),
     ),
     FelicitaButtonDescription(
         key="reset_timer",
         name="Reset Timer",
+        unique_id_fn=lambda scale: f"{scale.mac}_reset_timer",
         press_action=lambda client: client.async_reset_timer(),
     ),
     FelicitaButtonDescription(
         key="toggle_unit",
         name="Toggle Unit",
+        unique_id_fn=lambda scale: f"{scale.mac}_toggle_unit",
         press_action=lambda client: client.async_toggle_unit(),
     ),
 ]

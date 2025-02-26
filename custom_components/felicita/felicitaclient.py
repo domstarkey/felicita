@@ -43,7 +43,6 @@ class FelicitaClient:
         """Initialize client."""
         self._hass = hass
         self._entry = entry
-        self._mac=entry.data[CONF_MAC]
         self._notify_callback = notify_callback
         self._client: BleakClient | None = None
         self._device: BLEDevice | None = None
@@ -52,6 +51,11 @@ class FelicitaClient:
         self._unit: str = "g"
         self._is_connected: bool = False
         self._connect_retries = 0
+
+        super().__init__(
+            mac=entry.data[CONF_MAC],
+            notify_callback=notify_callback,
+        )
 
     @property
     def weight(self) -> float:

@@ -39,7 +39,7 @@ SENSORS: tuple[FelicitaSensorEntityDescription, ...] = (
         native_unit_of_measurement="%",
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:battery",
-        unique_id_fn=lambda scale: f"{scale.mac}_battery",
+        unique_id_fn=lambda scale: f"{scale.device_id}_battery",
         unit_fn=None,
     ),
     FelicitaSensorEntityDescription(
@@ -49,7 +49,7 @@ SENSORS: tuple[FelicitaSensorEntityDescription, ...] = (
         native_unit_of_measurement="g",
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:scale",
-        unique_id_fn=lambda scale: f"{scale.mac}_weight",
+        unique_id_fn=lambda scale: f"{scale.device_id}_weight",
         unit_fn=lambda data: "oz" if data.get(UNITS) == OUNCE else "g",
     ),
 )

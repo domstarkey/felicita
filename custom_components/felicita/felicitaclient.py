@@ -7,12 +7,12 @@ from bleak.exc import BleakError
 from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
 )
+from homeassistant.const import CONF_MAC
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
-    CONF_MAC_ADDRESS,
     MIN_BATTERY_LEVEL,
     MAX_BATTERY_LEVEL,
 )
@@ -37,6 +37,7 @@ class FelicitaClient:
         """Initialize client."""
         self._hass = hass
         self._entry = entry
+        self._mac=entry.data[CONF_MAC],
         self._notify_callback = notify_callback
         self._client: BleakClient | None = None
         self._device: BLEDevice | None = None
@@ -67,10 +68,9 @@ class FelicitaClient:
 
     async def async_connect(self) -> None:
         """Connect to the scale."""
-        address = self._entry.data[CONF_MAC_ADDRESS]
-        device = async_ble_device_from_address(self._hass, address)
+        device = async_ble_device_from_address(self._hass, self._mac)
         if not device:
-            raise ConfigEntryNotReady(f"Could not find device with address {address}")
+            raise ConfigEntryNotReady(f"Could not find device with address {self._mac}")
 
         self._device = device
         self._client = BleakClient(device, disconnected_callback=self._disconnected_callback)

@@ -1,4 +1,4 @@
-"""Sensor platform for Acaia."""
+"""Sensor platform for Felicita."""
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -13,29 +13,29 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from pyacaia_async.const import BATTERY_LEVEL, OUNCE, UNITS, WEIGHT
+from pyfelicita_async.const import BATTERY_LEVEL, OUNCE, UNITS, WEIGHT
 
 from .const import DOMAIN
 
-from .entity import AcaiaEntity, AcaiaEntityDescription
+from .entity import FelicitaEntity, FelicitaEntityDescription
 
 
 @dataclass
-class AcaiaSensorEntityDescriptionMixin:
-    """Mixin for Acaia Sensor entities."""
+class FelicitaSensorEntityDescriptionMixin:
+    """Mixin for Felicita Sensor entities."""
 
     unit_fn: Callable[[dict[str, Any]], str] | None
 
 
 @dataclass
-class AcaiaSensorEntityDescription(
-    SensorEntityDescription, AcaiaEntityDescription, AcaiaSensorEntityDescriptionMixin
+class FelicitaSensorEntityDescription(
+    SensorEntityDescription, FelicitaEntityDescription, FelicitaSensorEntityDescriptionMixin
 ):
-    """Description for Acaia Sensor entities."""
+    """Description for Felicita Sensor entities."""
 
 
-SENSORS: tuple[AcaiaSensorEntityDescription, ...] = (
-    AcaiaSensorEntityDescription(
+SENSORS: tuple[FelicitaSensorEntityDescription, ...] = (
+    FelicitaSensorEntityDescription(
         key=BATTERY_LEVEL,
         translation_key="battery",
         device_class=SensorDeviceClass.BATTERY,
@@ -45,7 +45,7 @@ SENSORS: tuple[AcaiaSensorEntityDescription, ...] = (
         unique_id_fn=lambda scale: f"{scale.mac}_battery",
         unit_fn=None,
     ),
-    AcaiaSensorEntityDescription(
+    FelicitaSensorEntityDescription(
         key=WEIGHT,
         translation_key="weight",
         device_class=SensorDeviceClass.WEIGHT,
@@ -67,14 +67,14 @@ async def async_setup_entry(
 
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     async_add_entities(
-        [AcaiaSensor(coordinator, entity_description) for entity_description in SENSORS]
+        [FelicitaSensor(coordinator, entity_description) for entity_description in SENSORS]
     )
 
 
-class AcaiaSensor(AcaiaEntity, RestoreSensor):
-    """Representation of a Acaia Sensor."""
+class FelicitaSensor(FelicitaEntity, RestoreSensor):
+    """Representation of a Felicita Sensor."""
 
-    entity_description: AcaiaSensorEntityDescription
+    entity_description: FelicitaSensorEntityDescription
 
     def __init__(self, coordinator, entity_description) -> None:
         """Initialize the sensor."""

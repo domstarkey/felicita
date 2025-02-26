@@ -1,4 +1,6 @@
-"""Binary sensor platform for Acaia scales."""
+"""Binary sensor platform for Felicita integration."""
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -11,29 +13,30 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .acaiaclient import AcaiaClient
+from .felicitaclient import FelicitaClient
 from .const import DOMAIN
-from .entity import AcaiaEntity, AcaiaEntityDescription
+from .coordinator import FelicitaCoordinator
+from .entity import FelicitaEntity, FelicitaEntityDescription
 
 
 @dataclass
-class AcaiaBinarySensorEntityDescriptionMixin:
-    """Mixin for Acaia Binary Sensor entities."""
+class FelicitaBinarySensorEntityDescriptionMixin:
+    """Mixin for Felicita Binary Sensor entities."""
 
-    is_on_fn: Callable[[AcaiaClient], bool]
+    is_on_fn: Callable[[FelicitaClient], bool]
 
 
 @dataclass
-class AcaiaBinarySensorEntityDescription(
+class FelicitaBinarySensorEntityDescription(
     BinarySensorEntityDescription,
-    AcaiaEntityDescription,
-    AcaiaBinarySensorEntityDescriptionMixin,
+    FelicitaEntityDescription,
+    FelicitaBinarySensorEntityDescriptionMixin,
 ):
-    """Description for Acaia Binary Sensor entities."""
+    """Description for Felicita Binary Sensor entities."""
 
 
-BINARY_SENSORS: tuple[AcaiaBinarySensorEntityDescription, ...] = (
-    AcaiaBinarySensorEntityDescription(
+BINARY_SENSORS: tuple[FelicitaBinarySensorEntityDescription, ...] = (
+    FelicitaBinarySensorEntityDescription(
         key="timer_running",
         translation_key="timer_running",
         device_class=BinarySensorDeviceClass.RUNNING,
@@ -41,7 +44,7 @@ BINARY_SENSORS: tuple[AcaiaBinarySensorEntityDescription, ...] = (
         unique_id_fn=lambda scale: f"{scale.mac}_timer_running",
         is_on_fn=lambda scale: scale.timer_running,
     ),
-    AcaiaBinarySensorEntityDescription(
+    FelicitaBinarySensorEntityDescription(
         key="connected",
         translation_key="connected",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
@@ -57,20 +60,21 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up button entities and services."""
+    """Set up the Felicita binary sensors."""
 
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: FelicitaCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+
     async_add_entities(
-        [AcaiaSensor(coordinator, description) for description in BINARY_SENSORS]
+        FelicitaBinarySensor(coordinator, description) for description in BINARY_SENSORS
     )
 
 
-class AcaiaSensor(AcaiaEntity, BinarySensorEntity):
-    """Representation of a Acaia Binary Sensor."""
+class FelicitaBinarySensor(FelicitaEntity, BinarySensorEntity):
+    """Representation of a Felicita binary sensor."""
 
-    entity_description: AcaiaBinarySensorEntityDescription
+    entity_description: FelicitaBinarySensorEntityDescription
 
     @property
     def is_on(self) -> bool | None:
         """Return true if the binary sensor is on."""
-        return self.entity_description.is_on_fn(self._scale)
+        return self.coordinator.data.is_connected

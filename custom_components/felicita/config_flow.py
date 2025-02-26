@@ -1,4 +1,4 @@
-"""Config flow for Acaia integration."""
+"""Config flow for Felicita integration."""
 from typing import Any
 
 import voluptuous as vol
@@ -10,8 +10,8 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import CONF_IS_NEW_STYLE_SCALE, DOMAIN
 
 
-class AcaiaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Acaia."""
+class FelicitaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Felicita."""
 
     VERSION = 2
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
@@ -31,7 +31,7 @@ class AcaiaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             await self.async_set_unique_id(user_input[CONF_MAC])
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="Acaia", data=user_input)
+            return self.async_create_entry(title="Felicita", data=user_input)
 
         return self.async_show_form(
             step_id="user",

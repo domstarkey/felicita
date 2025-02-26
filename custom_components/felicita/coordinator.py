@@ -1,4 +1,4 @@
-"""Coordinator for Acaia integration."""
+"""Coordinator for Felicita integration."""
 from datetime import timedelta
 import logging
 
@@ -6,39 +6,36 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from pyacaia_async.exceptions import AcaiaError
-
-from .acaiaclient import AcaiaClient
+from .felicitaclient import FelicitaClient
 
 SCAN_INTERVAL = timedelta(seconds=15)
 
 _LOGGER = logging.getLogger(__name__)
 
-
-class AcaiaApiCoordinator(DataUpdateCoordinator[AcaiaClient]):
-    """Class to handle fetching data from the La Marzocco API centrally."""
+class FelicitaCoordinator(DataUpdateCoordinator):
+    """Class to handle fetching data from the Felicita scale."""
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize coordinator."""
         super().__init__(
             hass,
             _LOGGER,
-            name="Acaia API coordinator",
+            name="Felicita scale coordinator",
             update_interval=SCAN_INTERVAL,
         )
 
-        self._acaia_client: AcaiaClient = AcaiaClient(
+        self._felicita_client: FelicitaClient = FelicitaClient(
             hass=hass,
             entry=config_entry,
             notify_callback=self.async_update_listeners,
         )
-        self.data = self._acaia_client
+        self.data = self._felicita_client
 
-    async def _async_update_data(self) -> AcaiaClient:
+    async def _async_update_data(self) -> FelicitaClient:
         """Fetch data."""
         try:
-            await self._acaia_client.async_update()
-        except (AcaiaError, TimeoutError) as ex:
-            raise UpdateFailed("Error: %s" % ex) from ex
+            await self._felicita_client.async_update()
+        except Exception as ex:
+            raise UpdateFailed(f"Error: {ex}") from ex
 
-        return self._acaia_client
+        return self._felicita_client 

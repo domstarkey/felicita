@@ -1,11 +1,11 @@
-"""Initialize the Acaia component."""
+"""Initialize the Felicita component."""
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_MAC
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 
 from .const import CONF_MAC_ADDRESS, DOMAIN
-from .coordinator import AcaiaApiCoordinator
+from .coordinator import FelicitaCoordinator
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -13,11 +13,11 @@ PLATFORMS = ["button", "sensor", "binary_sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Set up Acaia as config entry."""
+    """Set up Felicita as config entry."""
 
     hass.data.setdefault(DOMAIN, {})[
         config_entry.entry_id
-    ] = coordinator = AcaiaApiCoordinator(hass, config_entry)
+    ] = coordinator = FelicitaCoordinator(hass, config_entry)
 
     await coordinator.async_config_entry_first_refresh()
 

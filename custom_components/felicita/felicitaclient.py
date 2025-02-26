@@ -37,7 +37,7 @@ class FelicitaClient:
         """Initialize client."""
         self._hass = hass
         self._entry = entry
-        self._mac=entry.data[CONF_MAC],
+        self._mac=entry.data[CONF_MAC]
         self._notify_callback = notify_callback
         self._client: BleakClient | None = None
         self._device: BLEDevice | None = None

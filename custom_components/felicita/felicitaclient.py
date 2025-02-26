@@ -51,6 +51,7 @@ class FelicitaClient:
         self._unit: str = "g"
         self._is_connected: bool = False
         self._connect_retries = 0
+        self._mac = entry.data[CONF_MAC]
 
         super().__init__(
             mac=entry.data[CONF_MAC],
@@ -76,6 +77,16 @@ class FelicitaClient:
     def is_connected(self) -> bool:
         """Return connection state."""
         return self._is_connected
+
+    @property
+    def mac(self) -> str:
+        """Return the MAC address."""
+        return self._mac
+
+    @property
+    def name(self) -> str:
+        """Return the device name."""
+        return self._entry.data.get("name", "Felicita Scale")
 
     async def async_connect(self) -> None:
         """Connect to the scale with retry mechanism."""

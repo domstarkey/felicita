@@ -53,11 +53,6 @@ class FelicitaClient:
         self._connect_retries = 0
         self._mac = entry.data[CONF_MAC]
 
-        super().__init__(
-            mac=entry.data[CONF_MAC],
-            notify_callback=notify_callback,
-        )
-
     @property
     def weight(self) -> float:
         """Return current weight."""

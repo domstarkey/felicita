@@ -5,7 +5,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from homeassistant.components.button import (
-    ButtonDeviceClass,
     ButtonEntity,
     ButtonEntityDescription,
 )
@@ -34,7 +33,6 @@ BUTTONS = [
     FelicitaButtonDescription(
         key="tare",
         name="Tare",
-        device_class=ButtonDeviceClass.RESTART,
         press_action=lambda client: client.async_tare(),
     ),
     FelicitaButtonDescription(

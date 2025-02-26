@@ -7,7 +7,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_MAC, CONF_NAME
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import CONF_IS_NEW_STYLE_SCALE, DOMAIN
+from .const import DOMAIN
 
 
 class FelicitaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -44,7 +44,6 @@ class FelicitaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_MAC,
                         default=self._discovered.get(CONF_MAC, ""),
                     ): str,
-                    vol.Optional(CONF_IS_NEW_STYLE_SCALE, default=True): bool,
                 }
             ),
         )

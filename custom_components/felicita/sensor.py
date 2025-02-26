@@ -104,7 +104,7 @@ class FelicitaSensor(FelicitaEntity, RestoreSensor):
     def native_unit_of_measurement(self) -> str:
         """Return the unit of measurement."""
         if not self._restored and self.entity_description.unit_fn is not None:
-            self.entity_description.unit_fn(self._data)
+            return self.entity_description.unit_fn(self._data)
         return self._native_unit_of_measurement
 
     @property

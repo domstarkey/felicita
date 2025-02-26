@@ -1,12 +1,10 @@
 """Client for Felicita scales."""
-import logging
 from typing import Callable
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 from homeassistant.components.bluetooth import (
-    BluetoothServiceInfoBleak,
     async_ble_device_from_address,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -15,13 +13,10 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
     CONF_MAC_ADDRESS,
-    DEVICE_NAME,
-    MANUFACTURER,
     MIN_BATTERY_LEVEL,
     MAX_BATTERY_LEVEL,
 )
 
-_LOGGER = logging.getLogger(__name__)
 
 FELICITA_SERVICE_UUID = "FFE0"
 FELICITA_CHAR_UUID = "FFE1"

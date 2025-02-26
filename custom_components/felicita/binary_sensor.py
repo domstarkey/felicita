@@ -1,6 +1,4 @@
-"""Binary sensor platform for Felicita integration."""
-from __future__ import annotations
-
+"""Binary sensor platform for Felicita scales."""
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -15,7 +13,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .felicitaclient import FelicitaClient
 from .const import DOMAIN
-from .coordinator import FelicitaCoordinator
 from .entity import FelicitaEntity, FelicitaEntityDescription
 
 
@@ -60,21 +57,20 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Felicita binary sensors."""
+    """Set up button entities and services."""
 
-    coordinator: FelicitaCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]
     async_add_entities(
-        FelicitaBinarySensor(coordinator, description) for description in BINARY_SENSORS
+        [FelicitaSensor(coordinator, description) for description in BINARY_SENSORS]
     )
 
 
-class FelicitaBinarySensor(FelicitaEntity, BinarySensorEntity):
-    """Representation of a Felicita binary sensor."""
+class FelicitaSensor(FelicitaEntity, BinarySensorEntity):
+    """Representation of a Felicita Binary Sensor."""
 
     entity_description: FelicitaBinarySensorEntityDescription
 
     @property
     def is_on(self) -> bool | None:
         """Return true if the binary sensor is on."""
-        return self.coordinator.data.is_connected
+        return self.entity_description.is_on_fn(self._scale)

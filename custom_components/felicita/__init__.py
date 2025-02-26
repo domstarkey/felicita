@@ -28,25 +28,26 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-
     unload_ok = await hass.config_entries.async_unload_platforms(
         config_entry, PLATFORMS
     )
-
-    if unload_ok:
-        hass.data[DOMAIN].pop(config_entry.entry_id)
-
+    
+    # Always clean up the domain data, even if unload fails
+    hass.data[DOMAIN].pop(config_entry.entry_id, None)
+    
     return unload_ok
 
 
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     """Migrate old entry."""
-
+    if config_entry.version > 2:
+        return False
+        
     if config_entry.version == 1:
         new = {**config_entry.data}
         new[CONF_MAC] = new[CONF_MAC_ADDRESS]
-
+        
         config_entry.version = 2
         hass.config_entries.async_update_entry(config_entry, data=new)
-
+    
     return True

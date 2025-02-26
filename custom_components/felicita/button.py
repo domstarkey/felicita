@@ -40,25 +40,21 @@ BUTTONS = [
     FelicitaButtonDescription(
         key="start_timer",
         name="Start Timer",
-        device_class=ButtonDeviceClass.BUTTON,
         press_action=lambda client: client.async_start_timer(),
     ),
     FelicitaButtonDescription(
         key="stop_timer",
         name="Stop Timer",
-        device_class=ButtonDeviceClass.BUTTON,
         press_action=lambda client: client.async_stop_timer(),
     ),
     FelicitaButtonDescription(
         key="reset_timer",
         name="Reset Timer",
-        device_class=ButtonDeviceClass.BUTTON,
         press_action=lambda client: client.async_reset_timer(),
     ),
     FelicitaButtonDescription(
         key="toggle_unit",
         name="Toggle Unit",
-        device_class=ButtonDeviceClass.BUTTON,
         press_action=lambda client: client.async_toggle_unit(),
     ),
 ]

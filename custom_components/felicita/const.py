@@ -6,6 +6,7 @@ BATTERY_LEVEL = "battery_level"
 WEIGHT = "weight"
 UNITS = "units"
 OUNCE = "oz"
+FLOW_RATE = "flow_rate"
 
 CONF_MAC_ADDRESS = "mac_address"
 

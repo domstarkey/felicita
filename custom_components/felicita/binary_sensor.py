@@ -33,21 +33,21 @@ class FelicitaBinarySensorEntityDescription(
 
 
 BINARY_SENSORS: tuple[FelicitaBinarySensorEntityDescription, ...] = (
-    FelicitaBinarySensorEntityDescription(
-        key="timer_running",
-        translation_key="timer_running",
-        device_class=BinarySensorDeviceClass.RUNNING,
-        icon="mdi:timer",
-        unique_id_fn=lambda scale: f"{scale.mac}_timer_running",
-        is_on_fn=lambda scale: scale.timer_running,
-    ),
+    # FelicitaBinarySensorEntityDescription(
+    #     key="timer_running",
+    #     translation_key="timer_running",
+    #     device_class=BinarySensorDeviceClass.RUNNING,
+    #     icon="mdi:timer",
+    #     unique_id_fn=lambda scale: f"{scale.mac}_timer_running",
+    #     is_on_fn=lambda scale: scale.timer_running,
+    # ),
     FelicitaBinarySensorEntityDescription(
         key="connected",
         translation_key="connected",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         icon="mdi:bluetooth",
         unique_id_fn=lambda scale: f"{scale.mac}_connected",
-        is_on_fn=lambda scale: scale.connected,
+        is_on_fn=lambda scale: scale.is_connected,
     ),
 )
 

@@ -1,12 +1,15 @@
 """Client for Felicita scales."""
 from typing import Callable
 from time import time
+import asyncio
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
+    async_scanner_count,
+    async_address_present,
 )
 from homeassistant.const import CONF_MAC
 from homeassistant.config_entries import ConfigEntry
@@ -56,6 +59,7 @@ class FelicitaClient:
         self._last_weight: float = 0
         self._last_weight_time: float = 0
         self._flow_rate: float = 0
+        self._heartbeat_task = None
 
     @property
     def weight(self) -> float:
@@ -179,14 +183,36 @@ class FelicitaClient:
 
     async def async_disconnect(self) -> None:
         """Disconnect from device."""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
         if self._client:
             await self._client.disconnect()
         self._is_connected = False
 
     async def async_update(self) -> None:
         """Update data from device."""
-        if not self._is_connected:
-            await self.async_connect()
+        # Check if bluetooth scanner is available
+        scanner_count = async_scanner_count(self._hass, connectable=True)
+        if scanner_count == 0:
+            self._is_connected = False
+            _LOGGER.debug("No bluetooth scanner available")
+            return
+
+        # Check if device is available before attempting connection
+        device_available = async_address_present(
+            self._hass, self._mac, connectable=True
+        )
+        
+        if device_available:
+            if not self._is_connected:
+                await self.async_connect()
+        else:
+            self._is_connected = False
+            _LOGGER.debug(
+                "Device with MAC %s not available",
+                self._mac,
+            )
+            self._notify_callback()
 
     async def async_tare(self) -> None:
         """Tare the scale."""
@@ -212,3 +238,17 @@ class FelicitaClient:
         """Toggle between grams and ounces."""
         if self._client and self._is_connected:
             await self._client.write_gatt_char(FELICITA_CHAR_UUID, bytes([CMD_TOGGLE_UNIT]))
+
+    async def start(self) -> None:
+        """Start the background tasks."""
+        self._heartbeat_task = self._entry.async_create_background_task(
+            self._hass,
+            self._heartbeat(),
+            name="felicita_heartbeat",
+        )
+
+    async def _heartbeat(self) -> None:
+        """Run heartbeat loop."""
+        while True:
+            await self.async_update()
+            await asyncio.sleep(10)  # Check every 10 seconds

@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from homeassistant.components.button import (
     ButtonEntity,
@@ -14,23 +15,28 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import FelicitaCoordinator
-from .entity import FelicitaEntity
+from .entity import FelicitaEntity, FelicitaEntityDescription
 
 
 @dataclass
 class FelicitaButtonDescriptionMixin:
     """Mixin to describe a Button entity."""
 
-    press_action: Callable
-    unique_id_fn: Callable = lambda scale: f"{scale.mac}_{scale.key}"
+    press_action: Callable[[Any], Any]
+    unique_id_fn: Callable[[Any], str]
+
+    def __post_init__(self):
+        """Set default for unique_id_fn if not provided."""
+        if not hasattr(self, "unique_id_fn"):
+            self.unique_id_fn = lambda scale: f"{scale.mac}_{scale.key}"
 
 
 @dataclass
-class FelicitaButtonDescription(ButtonEntityDescription, FelicitaButtonDescriptionMixin):
+class FelicitaButtonDescription(ButtonEntityDescription, FelicitaEntityDescription, FelicitaButtonDescriptionMixin):
     """Class describing Felicita button entities."""
 
 
-BUTTONS = [
+BUTTONS: tuple[FelicitaButtonDescription, ...] = [
     FelicitaButtonDescription(
         key="tare",
         name="Tare",

@@ -13,7 +13,7 @@ from .const import DOMAIN
 
 @dataclass
 class FelicitaEntityDescriptionMixin:
-    """Mixin for all LM entities."""
+    """Mixin for all Felicita entities."""
 
     unique_id_fn: Callable[[FelicitaClient], str]
 

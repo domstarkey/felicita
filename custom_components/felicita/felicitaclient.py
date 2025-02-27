@@ -105,11 +105,11 @@ class FelicitaClient:
                 )
                 self._connect_retries = 0  # Reset counter on successful connection
                 return
-            except (BleakError, TimeoutError) as error:
+            except (BleakError, TimeoutError): # as error:
                 self._connect_retries += 1
                 if self._connect_retries >= MAX_RETRIES:
                     self._is_connected = False
-                    raise ConfigEntryNotReady(f"Failed to connect after {MAX_RETRIES} attempts: {error}")
+                    # raise ConfigEntryNotReady(f"Failed to connect after {MAX_RETRIES} attempts: {error}")
                 _LOGGER.warning("Connection attempt %s failed, retrying...", self._connect_retries)
 
     def _disconnected_callback(self, _: BleakClient) -> None:

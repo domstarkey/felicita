@@ -1,4 +1,4 @@
-"""Base class for the La Marzocco entities."""
+"""Base class for the Felicita entities."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ class FelicitaEntityDescriptionMixin:
 
 @dataclass
 class FelicitaEntityDescription(EntityDescription, FelicitaEntityDescriptionMixin):
-    """Description for all LM entities."""
+    """Description for all Felicita entities."""
 
 
 @dataclass

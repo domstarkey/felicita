@@ -8,13 +8,16 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntityDescription,
     SensorStateClass,
+    SensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.const import DEVICE_CLASS_WEIGHT
 
 from .const import DOMAIN, BATTERY_LEVEL, OUNCE, UNITS, WEIGHT
 from .entity import FelicitaEntity, FelicitaEntityDescription
+from .felicitaclient import FelicitaClient
 
 
 @dataclass
@@ -114,3 +117,21 @@ class FelicitaSensor(FelicitaEntity, RestoreSensor):
     def native_value(self) -> float:
         """Return the state of the sensor."""
         return self._data.get(self.entity_description.key, 0)
+
+
+class FelicitaFlowRateSensor(SensorEntity):
+    """Representation of Felicita Flow Rate sensor."""
+
+    def __init__(self, client: FelicitaClient) -> None:
+        """Initialize the sensor."""
+        self._client = client
+        self._attr_unique_id = f"{client.mac}_flow_rate"
+        self._attr_name = f"{client.name} Flow Rate"
+        self._attr_native_unit_of_measurement = "g/s"
+        self._attr_device_class = DEVICE_CLASS_WEIGHT
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float:
+        """Return the flow rate."""
+        return self._client.flow_rate

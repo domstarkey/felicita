@@ -1,5 +1,6 @@
 """Client for Felicita scales."""
 from typing import Callable
+from time import time
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
@@ -52,6 +53,9 @@ class FelicitaClient:
         self._is_connected: bool = False
         self._connect_retries = 0
         self._mac = entry.data[CONF_MAC]
+        self._last_weight: float = 0
+        self._last_weight_time: float = 0
+        self._flow_rate: float = 0
 
     @property
     def weight(self) -> float:
@@ -82,6 +86,11 @@ class FelicitaClient:
     def name(self) -> str:
         """Return the device name."""
         return self._entry.data.get("name", "Felicita Scale")
+
+    @property
+    def flow_rate(self) -> float:
+        """Return current flow rate in g/s."""
+        return self._flow_rate
 
     async def async_connect(self) -> None:
         """Connect to the scale with retry mechanism."""
@@ -125,9 +134,14 @@ class FelicitaClient:
                 return
 
             # Parse weight - bytes 3-9 contain weight digits
+            # Last two digits are decimal places
             weight_bytes = data[3:9]
             try:
-                self._weight = float(''.join([str(b - 48) for b in weight_bytes])) / 100
+                # Convert ASCII values to actual digits by subtracting 48
+                digits = [str(b - 48) for b in weight_bytes]
+                # Join all digits and convert to float, moving decimal point 2 places from right
+                weight_str = ''.join(digits[:-2]) + '.' + ''.join(digits[-2:])
+                self._weight = float(weight_str)
             except ValueError as e:
                 _LOGGER.warning("Failed to parse weight: %s", e)
                 return
@@ -138,13 +152,26 @@ class FelicitaClient:
                                 (MAX_BATTERY_LEVEL - MIN_BATTERY_LEVEL)) * 100
             self._battery = max(0, min(100, round(battery_percentage)))
 
-            # Parse unit with validation
+            # Parse unit (bytes 9-11)
             try:
                 unit = data[9:11].decode('utf-8').strip()
                 if unit in ['g', 'oz']:  # Add valid units here
                     self._unit = unit
             except UnicodeDecodeError as e:
                 _LOGGER.warning("Failed to decode unit: %s", e)
+
+            # Calculate flow rate (g/s)
+            current_time = time()
+            if self._last_weight_time > 0:
+                time_diff = current_time - self._last_weight_time
+                weight_diff = self._weight - self._last_weight
+                if time_diff > 0:
+                    # Smooth the flow rate with a simple moving average
+                    new_flow_rate = weight_diff / time_diff
+                    self._flow_rate = (self._flow_rate + new_flow_rate) / 2
+            
+            self._last_weight = self._weight
+            self._last_weight_time = current_time
 
             self._notify_callback()
         except Exception as e:

@@ -86,10 +86,10 @@ class FelicitaSensor(FelicitaEntity, RestoreSensor):
         """Handle updated data from the coordinator."""
         # Update data based on the entity type
         if self.entity_description.key == WEIGHT:
-            self._data[WEIGHT] = self.coordinator.weight
-            self._data[UNITS] = self.coordinator.unit
+            self._data[WEIGHT] = self.coordinator.data.weight
+            self._data[UNITS] = self.coordinator.data.unit
         elif self.entity_description.key == BATTERY_LEVEL:
-            self._data[BATTERY_LEVEL] = self.coordinator.battery
+            self._data[BATTERY_LEVEL] = self.coordinator.data.battery
         
         self.async_write_ha_state()
 

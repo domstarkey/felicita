@@ -1,28 +1,26 @@
-"""Client for Felicita scales."""
-from typing import Callable
-from time import time
 import asyncio
+import logging
+from time import time
+from typing import Callable
 
-from bleak import BleakClient
+from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
     async_scanner_count,
     async_address_present,
+    async_register_callback
 )
 from homeassistant.const import CONF_MAC
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from asyncio import TimeoutError
-import logging
 
 from .const import (
     MIN_BATTERY_LEVEL,
     MAX_BATTERY_LEVEL,
 )
-
 
 FELICITA_SERVICE_UUID = "FFE0"
 FELICITA_CHAR_UUID = "FFE1"
@@ -59,7 +57,9 @@ class FelicitaClient:
         self._last_weight: float = 0
         self._last_weight_time: float = 0
         self._flow_rate: float = 0
-        self._heartbeat_task = None
+
+        # Register BLE device detection callback
+        async_register_callback(hass, self._device_detected, match_dict={"address": self._mac})
 
     @property
     def weight(self) -> float:
@@ -118,12 +118,18 @@ class FelicitaClient:
                 )
                 self._connect_retries = 0  # Reset counter on successful connection
                 return
-            except (BleakError, TimeoutError): # as error:
+            except (BleakError, TimeoutError):
                 self._connect_retries += 1
                 if self._connect_retries >= MAX_RETRIES:
                     self._is_connected = False
                     # raise ConfigEntryNotReady(f"Failed to connect after {MAX_RETRIES} attempts: {error}")
                 _LOGGER.warning("Connection attempt %s failed, retrying...", self._connect_retries)
+
+    def _device_detected(self, device, advertisement_data):
+        """Handle device detection and initiate connection."""
+        if device.address == self._mac:
+            _LOGGER.info(f"Device {self._mac} detected! Connecting...")
+            asyncio.create_task(self.async_connect())
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
@@ -183,8 +189,6 @@ class FelicitaClient:
 
     async def async_disconnect(self) -> None:
         """Disconnect from device."""
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
         if self._client:
             await self._client.disconnect()
         self._is_connected = False
@@ -203,15 +207,11 @@ class FelicitaClient:
             self._hass, self._mac, connectable=True
         )
         
-        if device_available:
-            if not self._is_connected:
-                await self.async_connect()
+        if device_available and not self._is_connected:
+            await self.async_connect()
         else:
             self._is_connected = False
-            _LOGGER.debug(
-                "Device with MAC %s not available",
-                self._mac,
-            )
+            _LOGGER.debug("Device with MAC %s not available", self._mac)
             self._notify_callback()
 
     async def async_tare(self) -> None:
@@ -238,17 +238,3 @@ class FelicitaClient:
         """Toggle between grams and ounces."""
         if self._client and self._is_connected:
             await self._client.write_gatt_char(FELICITA_CHAR_UUID, bytes([CMD_TOGGLE_UNIT]))
-
-    async def start(self) -> None:
-        """Start the background tasks."""
-        self._heartbeat_task = self._entry.async_create_background_task(
-            self._hass,
-            self._heartbeat(),
-            name="felicita_heartbeat",
-        )
-
-    async def _heartbeat(self) -> None:
-        """Run heartbeat loop."""
-        while True:
-            await self.async_update()
-            await asyncio.sleep(10)  # Check every 10 seconds

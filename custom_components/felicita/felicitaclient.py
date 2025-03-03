@@ -10,7 +10,8 @@ from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
     async_scanner_count,
     async_address_present,
-    async_register_callback
+    async_register_callback,
+    BluetoothScanningMode
 )
 from homeassistant.const import CONF_MAC
 from homeassistant.config_entries import ConfigEntry
@@ -59,7 +60,12 @@ class FelicitaClient:
         self._flow_rate: float = 0
 
         # Register BLE device detection callback
-        async_register_callback(hass, self._device_detected, match_dict={"address": self._mac})
+        async_register_callback(
+            hass,
+            self._device_detected,
+            {"address": self._mac},
+            BluetoothScanningMode.PASSIVE
+        )
 
     @property
     def weight(self) -> float:

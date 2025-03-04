@@ -139,12 +139,12 @@ class FelicitaClient:
                         self._client = client
 
                         # Verify services are available
-                        if not client.services:
-                            raise BleakError("Failed to retrieve services from the device")
+                        #if not client.services:
+                            #raise BleakError("Failed to retrieve services from the device")
 
-                        services = client.services
-                        if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
-                            raise BleakError("Felicita service not found")
+                        #services = client.services
+                        #if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
+                            #raise BleakError("Felicita service not found")
 
                         # Start notifications only after successful connection and service discovery
                         await client.start_notify(

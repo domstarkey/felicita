@@ -2,6 +2,7 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.const import SERVICE_RELOAD
 
 from .const import DOMAIN
@@ -30,7 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
     # Register reload service
-    hass.helpers.service.async_register_admin_service(
+    await async_register_admin_service(
         DOMAIN,
         SERVICE_RELOAD,
         lambda _: _reload_entry(hass, config_entry)

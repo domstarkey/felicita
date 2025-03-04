@@ -120,26 +120,34 @@ class FelicitaClient:
                     timeout=CONNECT_TIMEOUT
                 )
 
-                # Ensure connection is successful before proceeding
-                if await self._client.connect():
-                    self._is_connected = True
-                    try:
-                        await self._client.start_notify(
-                            FELICITA_CHAR_UUID, self._notification_callback
-                        )
-                        self._connect_retries = 0  # Reset counter on successful connection
-                        return
-                    except BleakError as notify_error:
-                        _LOGGER.error("Failed to start notifications: %s", notify_error)
-                        await self._client.disconnect()
-                        self._client = None
-                        self._is_connected = False
-                else:
-                    self._client = None
-                    self._is_connected = False
-                    
+                # Connect first
+                await self._client.connect()
+                
+                # Wait a short moment for services to be discovered
+                await asyncio.sleep(0.5)
+                
+                # Verify services are available
+                services = await self._client.get_services()
+                if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
+                    raise BleakError("Felicita service not found")
+
+                # Start notifications only after successful connection and service discovery
+                await self._client.start_notify(
+                    FELICITA_CHAR_UUID, self._notification_callback
+                )
+                
+                self._is_connected = True
+                self._connect_retries = 0  # Reset counter on successful connection
+                _LOGGER.debug("Successfully connected to device %s", self._mac)
+                return
+
             except (BleakError, TimeoutError) as error:
                 _LOGGER.info("Connection attempt %s failed: %s", self._connect_retries + 1, error)
+                if self._client:
+                    try:
+                        await self._client.disconnect()
+                    except Exception:
+                        pass
                 self._client = None
                 self._is_connected = False
                 self._connect_retries += 1

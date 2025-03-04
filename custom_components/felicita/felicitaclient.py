@@ -138,29 +138,27 @@ class FelicitaClient:
                         timeout=CONNECT_TIMEOUT
                     )
 
-                    # Connect with timeout
-                    try:
-                        async with asyncio.timeout(CONNECT_TIMEOUT):
-                            await self._client.connect()
-                    except asyncio.TimeoutError:
-                        raise BleakError("Connection timed out")
+                    # Connect first
+                    await self._client.connect()
 
-                    # Wait for services with timeout
-                    try:
-                        async with asyncio.timeout(5):
-                            services = self._client.services
-                            if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
-                                raise BleakError("Felicita service not found")
-                    except asyncio.TimeoutError:
-                        raise BleakError("Service discovery timed out")
+                    # Wait a short moment for services to be discovered
+                    await asyncio.sleep(1)
 
-                    # Start notifications
+                    # Verify services are available
+                    if not self._client or not self._client.services:
+                        raise BleakError("Failed to retrieve services from the device")
+
+                    services = self._client.services  # Use property instead of deprecated method
+                    if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
+                        raise BleakError("Felicita service not found")
+
+                    # Start notifications only after successful connection and service discovery
                     await self._client.start_notify(
                         FELICITA_CHAR_UUID, self._notification_callback
                     )
-                    
+
                     self._is_connected = True
-                    self._connect_retries = 0
+                    self._connect_retries = 0  # Reset counter on successful connection
                     _LOGGER.debug("Successfully connected to device %s", self._mac)
                     return
 

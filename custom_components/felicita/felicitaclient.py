@@ -60,6 +60,7 @@ class FelicitaClient:
         self._flow_rate: float = 0
 
         # Register BLE device detection callback
+        _LOGGER.debug("Registering BLE device detection callback for MAC: %s", self._mac)
         async_register_callback(
             hass,
             self._device_detected,
@@ -133,9 +134,12 @@ class FelicitaClient:
 
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
+        _LOGGER.debug("Device detected with address: %s", device.address)
         if device.address == self._mac:
-            _LOGGER.info(f"Device {self._mac} detected! Connecting...")
+            _LOGGER.info("Device %s detected! Connecting...", self._mac)
             asyncio.create_task(self.async_connect())
+        else:
+            _LOGGER.debug("Detected device address does not match: %s", device.address)
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""

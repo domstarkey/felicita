@@ -55,7 +55,6 @@ SENSORS: tuple[FelicitaSensorEntityDescription, ...] = (
     FelicitaSensorEntityDescription(
         key=FLOW_RATE,
         translation_key="flow_rate",
-        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
         native_unit_of_measurement="g/s",
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:scale",

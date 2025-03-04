@@ -59,6 +59,8 @@ class FelicitaClient:
         self._last_weight_time: float = 0
         self._flow_rate: float = 0
         self._ema_alpha = 0.1  # Smoothing factor for EMA (lower = smoother)
+        self._connection_lock = asyncio.Lock()  # Add connection lock
+        self._disconnect_event = asyncio.Event()  # Add disconnect event
 
         # Register BLE device detection callback without immediate connection attempt
         _LOGGER.debug("Registering BLE device detection callback for MAC: %s", self._mac)
@@ -106,56 +108,83 @@ class FelicitaClient:
 
     async def async_connect(self) -> None:
         """Connect to the scale with retry mechanism."""
-        while self._connect_retries < MAX_RETRIES:
-            try:
-                device = async_ble_device_from_address(self._hass, self._mac)
-                if not device:
-                    self._is_connected = False
-                    _LOGGER.error("Could not find device with address %s", self._mac)
-                    return
-
-                self._device = device
-                self._client = BleakClient(
-                    device, 
-                    disconnected_callback=self._disconnected_callback,
-                    timeout=CONNECT_TIMEOUT
-                )
-
-                # Connect first
-                await self._client.connect()
-                
-                # Wait a short moment for services to be discovered
-                await asyncio.sleep(0.5)
-                
-                # Verify services are available
-                services = self._client.services
-                if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
-                    raise BleakError("Felicita service not found")
-
-                # Start notifications only after successful connection and service discovery
-                await self._client.start_notify(
-                    FELICITA_CHAR_UUID, self._notification_callback
-                )
-                
-                self._is_connected = True
-                self._connect_retries = 0  # Reset counter on successful connection
-                _LOGGER.debug("Successfully connected to device %s", self._mac)
+        async with self._connection_lock:  # Ensure only one connection attempt at a time
+            if self._is_connected:
                 return
 
-            except (BleakError, OSError, asyncio.exceptions.TimeoutError) as error:
-                _LOGGER.warning("Connection attempt %s failed: %s", self._connect_retries + 1, error)
-                if self._client:
+            while self._connect_retries < MAX_RETRIES:
+                try:
+                    # Clear any previous disconnect event
+                    self._disconnect_event.clear()
+                    
+                    device = async_ble_device_from_address(self._hass, self._mac)
+                    if not device:
+                        self._is_connected = False
+                        _LOGGER.error("Could not find device with address %s", self._mac)
+                        return
+
+                    self._device = device
+                    
+                    # Disconnect any existing client
+                    if self._client:
+                        try:
+                            await self._client.disconnect()
+                        except Exception:
+                            pass
+                    
+                    self._client = BleakClient(
+                        device, 
+                        disconnected_callback=self._disconnected_callback,
+                        timeout=CONNECT_TIMEOUT
+                    )
+
+                    # Connect with timeout
                     try:
-                        await self._client.disconnect()
-                    except Exception:
-                        pass
-                self._client = None
-                self._is_connected = False
-                self._connect_retries += 1
-                if self._connect_retries >= MAX_RETRIES:
-                    _LOGGER.error("Failed to connect after %s attempts", MAX_RETRIES)
+                        async with asyncio.timeout(CONNECT_TIMEOUT):
+                            await self._client.connect()
+                    except asyncio.TimeoutError:
+                        raise BleakError("Connection timed out")
+
+                    # Wait for services with timeout
+                    try:
+                        async with asyncio.timeout(5):
+                            services = self._client.services
+                            if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
+                                raise BleakError("Felicita service not found")
+                    except asyncio.TimeoutError:
+                        raise BleakError("Service discovery timed out")
+
+                    # Start notifications
+                    await self._client.start_notify(
+                        FELICITA_CHAR_UUID, self._notification_callback
+                    )
+                    
+                    self._is_connected = True
+                    self._connect_retries = 0
+                    _LOGGER.debug("Successfully connected to device %s", self._mac)
                     return
-                await asyncio.sleep(2)  # Wait before retrying
+
+                except Exception as error:
+                    _LOGGER.warning(
+                        "Connection attempt %s failed: %s", 
+                        self._connect_retries + 1, 
+                        str(error)
+                    )
+                    if self._client:
+                        try:
+                            await self._client.disconnect()
+                        except Exception:
+                            pass
+                    self._client = None
+                    self._is_connected = False
+                    self._connect_retries += 1
+                    
+                    if self._connect_retries >= MAX_RETRIES:
+                        _LOGGER.error("Failed to connect after %s attempts", MAX_RETRIES)
+                        return
+                    
+                    # Exponential backoff between retries
+                    await asyncio.sleep(2 ** self._connect_retries)
 
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
@@ -166,8 +195,9 @@ class FelicitaClient:
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
         self._is_connected = False
-        self._client = None  # Reset client when disconnected
-        self._connect_retries = 0  # Reset retry counter
+        self._client = None
+        self._connect_retries = 0
+        self._disconnect_event.set()
         self._notify_callback()
 
     def _notification_callback(self, _: int, data: bytearray) -> None:

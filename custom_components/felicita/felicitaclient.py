@@ -111,7 +111,8 @@ class FelicitaClient:
                 device = async_ble_device_from_address(self._hass, self._mac)
                 if not device:
                     self._is_connected = False
-                    raise ConfigEntryNotReady(f"Could not find device with address {self._mac}")
+                    _LOGGER.error("Could not find device with address %s", self._mac)
+                    return
 
                 self._device = device
                 self._client = BleakClient(
@@ -127,7 +128,7 @@ class FelicitaClient:
                 await asyncio.sleep(0.5)
                 
                 # Verify services are available
-                services = await self._client.get_services()
+                services = self._client.services
                 if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
                     raise BleakError("Felicita service not found")
 
@@ -141,8 +142,8 @@ class FelicitaClient:
                 _LOGGER.debug("Successfully connected to device %s", self._mac)
                 return
 
-            except (BleakError, TimeoutError) as error:
-                _LOGGER.info("Connection attempt %s failed: %s", self._connect_retries + 1, error)
+            except (BleakError, OSError, asyncio.exceptions.TimeoutError) as error:
+                _LOGGER.warning("Connection attempt %s failed: %s", self._connect_retries + 1, error)
                 if self._client:
                     try:
                         await self._client.disconnect()
@@ -154,7 +155,7 @@ class FelicitaClient:
                 if self._connect_retries >= MAX_RETRIES:
                     _LOGGER.error("Failed to connect after %s attempts", MAX_RETRIES)
                     return
-                await asyncio.sleep(1)  # Wait before retrying
+                await asyncio.sleep(2)  # Wait before retrying
 
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""

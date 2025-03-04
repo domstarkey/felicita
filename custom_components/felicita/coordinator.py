@@ -30,3 +30,13 @@ class FelicitaCoordinator(DataUpdateCoordinator):
             notify_callback=self.async_update_listeners,
         )
         self.data = self._felicita_client
+
+    async def _async_update_data(self) -> FelicitaClient:
+        """Fetch data."""
+        # This method can be simplified or removed if not needed
+        try:
+            await self._felicita_client.async_update()
+        except Exception as ex:
+            raise UpdateFailed(f"Error: {ex}") from ex
+
+        return self._felicita_client 

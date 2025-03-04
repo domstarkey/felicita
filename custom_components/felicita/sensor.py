@@ -55,7 +55,7 @@ SENSORS: tuple[FelicitaSensorEntityDescription, ...] = (
     FelicitaSensorEntityDescription(
         key=FLOW_RATE,
         translation_key="flow_rate",
-        device_class=SensorDeviceClass.WEIGHT,
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
         native_unit_of_measurement="g/s",
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:scale",
@@ -100,6 +100,9 @@ class FelicitaSensor(FelicitaEntity, RestoreSensor):
             self._data[UNITS] = self.coordinator.data.unit
         elif self.entity_description.key == BATTERY_LEVEL:
             self._data[BATTERY_LEVEL] = self.coordinator.data.battery
+        elif self.entity_description.key == FLOW_RATE:
+            self._data[FLOW_RATE] = self.coordinator.data.flow_rate
+            self._data[UNITS] = self.coordinator.data.unit
         
         self.async_write_ha_state()
 

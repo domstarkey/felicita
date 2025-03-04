@@ -60,8 +60,8 @@ class FelicitaClient:
         self._flow_rate: float = 0
         self._ema_alpha = 0.1  # Smoothing factor for EMA (lower = smoother)
 
-        # Register BLE device detection callback
-        _LOGGER.info("Registering BLE device detection callback for MAC: %s", self._mac)
+        # Register BLE device detection callback without immediate connection attempt
+        _LOGGER.debug("Registering BLE device detection callback for MAC: %s", self._mac)
         async_register_callback(
             hass,
             self._device_detected,
@@ -150,12 +150,9 @@ class FelicitaClient:
 
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
-        _LOGGER.info("Device detected with address: %s", device.address)
-        if device.address == self._mac:
-            _LOGGER.info("Device %s detected! Connecting...", self._mac)
+        if not self._is_connected and device.address == self._mac:
+            _LOGGER.debug("Device %s detected! Connecting...", self._mac)
             asyncio.create_task(self.async_connect())
-        else:
-            _LOGGER.warning("Detected device address does not match: %s", device.address)
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
@@ -233,21 +230,12 @@ class FelicitaClient:
 
     async def async_update(self) -> None:
         """Update data from device."""
-        # Check if bluetooth scanner is available
-        scanner_count = async_scanner_count(self._hass, connectable=True)
-        if scanner_count == 0:
-            self._is_connected = False
-            _LOGGER.debug("No bluetooth scanner available")
-            return
-
-        # Check if device is available before attempting connection
+        # Only check if device is present, don't force connection
         device_available = async_address_present(
             self._hass, self._mac, connectable=True
         )
         
-        if device_available and not self._is_connected:
-            await self.async_connect()
-        elif not device_available:  # Only set disconnected if device is not available
+        if not device_available:
             self._is_connected = False
             _LOGGER.debug("Device with MAC %s not available", self._mac)
             self._notify_callback()

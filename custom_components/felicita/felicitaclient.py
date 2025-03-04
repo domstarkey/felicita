@@ -58,9 +58,10 @@ class FelicitaClient:
         self._last_weight: float = 0
         self._last_weight_time: float = 0
         self._flow_rate: float = 0
+        self._ema_alpha = 0.1  # Smoothing factor for EMA (lower = smoother)
 
         # Register BLE device detection callback
-        _LOGGER.debug("Registering BLE device detection callback for MAC: %s", self._mac)
+        _LOGGER.warning("Registering BLE device detection callback for MAC: %s", self._mac)
         async_register_callback(
             hass,
             self._device_detected,
@@ -134,12 +135,12 @@ class FelicitaClient:
 
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
-        _LOGGER.debug("Device detected with address: %s", device.address)
+        _LOGGER.warning("Device detected with address: %s", device.address)
         if device.address == self._mac:
-            _LOGGER.info("Device %s detected! Connecting...", self._mac)
+            _LOGGER.warning("Device %s detected! Connecting...", self._mac)
             asyncio.create_task(self.async_connect())
         else:
-            _LOGGER.debug("Detected device address does not match: %s", device.address)
+            _LOGGER.warning("Detected device address does not match: %s", device.address)
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
@@ -156,14 +157,19 @@ class FelicitaClient:
                 return
 
             # Parse weight - bytes 3-9 contain weight digits
-            # Last two digits are decimal places
             weight_bytes = data[3:9]
             try:
-                # Convert ASCII values to actual digits by subtracting 48
-                digits = [str(b - 48) for b in weight_bytes]
+                # Convert ASCII values to actual digits (ASCII 48 = '0')
+                digits = [b - 48 for b in weight_bytes]
                 # Join all digits and convert to float, moving decimal point 2 places from right
-                weight_str = ''.join(digits[:-2]) + '.' + ''.join(digits[-2:])
+                weight_str = ''.join(str(d) for d in digits[:-2]) + '.' + ''.join(str(d) for d in digits[-2:])
                 self._weight = float(weight_str)
+                
+                # If the first digit is negative (after subtracting 48), 
+                # this indicates a negative value from the scale
+                if digits[0] < 0:
+                    self._weight = -self._weight
+                    
             except ValueError as e:
                 _LOGGER.warning("Failed to parse weight: %s", e)
                 return
@@ -172,7 +178,8 @@ class FelicitaClient:
             battery_raw = data[15]
             battery_percentage = ((battery_raw - MIN_BATTERY_LEVEL) / 
                                 (MAX_BATTERY_LEVEL - MIN_BATTERY_LEVEL)) * 100
-            self._battery = max(0, min(100, round(battery_percentage)))
+            if abs(battery_percentage - self._battery) > 5:  # Only update if change is significant
+                self._battery = max(0, min(100, round(battery_percentage)))
 
             # Parse unit (bytes 9-11)
             try:
@@ -188,9 +195,13 @@ class FelicitaClient:
                 time_diff = current_time - self._last_weight_time
                 weight_diff = self._weight - self._last_weight
                 if time_diff > 0:
-                    # Smooth the flow rate with a simple moving average
+                    # Calculate new flow rate with exponential moving average
                     new_flow_rate = weight_diff / time_diff
-                    self._flow_rate = (self._flow_rate + new_flow_rate) / 2
+                    self._flow_rate = round(
+                        (self._ema_alpha * new_flow_rate + 
+                         (1 - self._ema_alpha) * self._flow_rate),
+                        1  # Round to 1 decimal place
+                    )
             
             self._last_weight = self._weight
             self._last_weight_time = current_time

@@ -140,6 +140,8 @@ class FelicitaClient:
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
         self._is_connected = False
+        self._client = None  # Reset client when disconnected
+        self._connect_retries = 0  # Reset retry counter
         self._notify_callback()
 
     def _notification_callback(self, _: int, data: bytearray) -> None:
@@ -215,7 +217,7 @@ class FelicitaClient:
         
         if device_available and not self._is_connected:
             await self.async_connect()
-        else:
+        elif not device_available:  # Only set disconnected if device is not available
             self._is_connected = False
             _LOGGER.debug("Device with MAC %s not available", self._mac)
             self._notify_callback()

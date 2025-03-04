@@ -61,7 +61,7 @@ class FelicitaClient:
         self._ema_alpha = 0.1  # Smoothing factor for EMA (lower = smoother)
 
         # Register BLE device detection callback
-        _LOGGER.warning("Registering BLE device detection callback for MAC: %s", self._mac)
+        _LOGGER.info("Registering BLE device detection callback for MAC: %s", self._mac)
         async_register_callback(
             hass,
             self._device_detected,
@@ -110,6 +110,7 @@ class FelicitaClient:
             try:
                 device = async_ble_device_from_address(self._hass, self._mac)
                 if not device:
+                    self._is_connected = False
                     raise ConfigEntryNotReady(f"Could not find device with address {self._mac}")
 
                 self._device = device
@@ -119,25 +120,39 @@ class FelicitaClient:
                     timeout=CONNECT_TIMEOUT
                 )
 
-                await self._client.connect()
-                self._is_connected = True
-                await self._client.start_notify(
-                    FELICITA_CHAR_UUID, self._notification_callback
-                )
-                self._connect_retries = 0  # Reset counter on successful connection
-                return
-            except (BleakError, TimeoutError):
+                # Ensure connection is successful before proceeding
+                if await self._client.connect():
+                    self._is_connected = True
+                    try:
+                        await self._client.start_notify(
+                            FELICITA_CHAR_UUID, self._notification_callback
+                        )
+                        self._connect_retries = 0  # Reset counter on successful connection
+                        return
+                    except BleakError as notify_error:
+                        _LOGGER.error("Failed to start notifications: %s", notify_error)
+                        await self._client.disconnect()
+                        self._client = None
+                        self._is_connected = False
+                else:
+                    self._client = None
+                    self._is_connected = False
+                    
+            except (BleakError, TimeoutError) as error:
+                _LOGGER.info("Connection attempt %s failed: %s", self._connect_retries + 1, error)
+                self._client = None
+                self._is_connected = False
                 self._connect_retries += 1
                 if self._connect_retries >= MAX_RETRIES:
-                    self._is_connected = False
-                    # raise ConfigEntryNotReady(f"Failed to connect after {MAX_RETRIES} attempts: {error}")
-                _LOGGER.warning("Connection attempt %s failed, retrying...", self._connect_retries)
+                    _LOGGER.error("Failed to connect after %s attempts", MAX_RETRIES)
+                    return
+                await asyncio.sleep(1)  # Wait before retrying
 
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
-        _LOGGER.warning("Device detected with address: %s", device.address)
+        _LOGGER.info("Device detected with address: %s", device.address)
         if device.address == self._mac:
-            _LOGGER.warning("Device %s detected! Connecting...", self._mac)
+            _LOGGER.info("Device %s detected! Connecting...", self._mac)
             asyncio.create_task(self.async_connect())
         else:
             _LOGGER.warning("Detected device address does not match: %s", device.address)
@@ -153,7 +168,7 @@ class FelicitaClient:
         """Handle notification from scale."""
         try:
             if len(data) != 18:
-                _LOGGER.warning("Received invalid data length: %s", len(data))
+                _LOGGER.info("Received invalid data length: %s", len(data))
                 return
 
             # Parse weight - bytes 3-9 contain weight digits

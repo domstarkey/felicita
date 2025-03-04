@@ -3,12 +3,11 @@ import logging
 from time import time
 from typing import Callable
 
-from bleak import BleakClient, BleakScanner
+from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
-    async_scanner_count,
     async_address_present,
     async_register_callback,
     BluetoothScanningMode
@@ -121,7 +120,7 @@ class FelicitaClient:
                     if not device:
                         self._is_connected = False
                         _LOGGER.error("Could not find device with address %s", self._mac)
-                        return
+                        return  # Early return if device not found
 
                     self._device = device
                     
@@ -132,35 +131,30 @@ class FelicitaClient:
                         except Exception:
                             pass
                     
-                    self._client = BleakClient(
+                    async with BleakClient(
                         device, 
                         disconnected_callback=self._disconnected_callback,
                         timeout=CONNECT_TIMEOUT
-                    )
+                    ) as client:
+                        self._client = client
 
-                    # Connect first
-                    await self._client.connect()
+                        # Verify services are available
+                        if not client.services:
+                            raise BleakError("Failed to retrieve services from the device")
 
-                    # Wait a short moment for services to be discovered
-                    await asyncio.sleep(1)
+                        services = client.services
+                        if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
+                            raise BleakError("Felicita service not found")
 
-                    # Verify services are available
-                    if not self._client or not self._client.services:
-                        raise BleakError("Failed to retrieve services from the device")
+                        # Start notifications only after successful connection and service discovery
+                        await client.start_notify(
+                            FELICITA_CHAR_UUID, self._notification_callback
+                        )
 
-                    services = self._client.services  # Use property instead of deprecated method
-                    if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
-                        raise BleakError("Felicita service not found")
-
-                    # Start notifications only after successful connection and service discovery
-                    await self._client.start_notify(
-                        FELICITA_CHAR_UUID, self._notification_callback
-                    )
-
-                    self._is_connected = True
-                    self._connect_retries = 0  # Reset counter on successful connection
-                    _LOGGER.debug("Successfully connected to device %s", self._mac)
-                    return
+                        self._is_connected = True
+                        self._connect_retries = 0  # Reset counter on successful connection
+                        _LOGGER.debug("Successfully connected to device %s", self._mac)
+                        return  # Early return after successful connection
 
                 except Exception as error:
                     _LOGGER.warning(

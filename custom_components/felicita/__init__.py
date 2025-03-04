@@ -2,6 +2,7 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.const import SERVICE_RELOAD
 
 from .const import DOMAIN
 from .coordinator import FelicitaCoordinator
@@ -9,6 +10,12 @@ from .coordinator import FelicitaCoordinator
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS = ["button", "sensor", "binary_sensor"]
+
+
+async def _reload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    """Reload the config entry."""
+    await async_unload_entry(hass, config_entry)
+    await async_setup_entry(hass, config_entry)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -21,6 +28,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Load platforms using async_forward_entry_setups instead of individual tasks
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+
+    # Register reload service
+    hass.helpers.service.async_register_admin_service(
+        DOMAIN,
+        SERVICE_RELOAD,
+        lambda _: _reload_entry(hass, config_entry)
+    )
 
     return True
 

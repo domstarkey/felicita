@@ -187,13 +187,22 @@ class FelicitaClient:
                     # Exponential backoff between retries
                     await asyncio.sleep(2 ** self._connect_retries)
 
-    def _device_detected(self, device, advertisement_data):
+    async def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
         if not self._is_connected and device.address == self._mac:
-            # Avoid multiple simultaneous connection attempts
-            if not self._connection_lock.locked():
-                _LOGGER.debug("Device %s detected! Initiating connection...", self._mac)
-                asyncio.create_task(self.async_connect())
+            # Try to acquire the lock without blocking
+            if await self._connection_lock.acquire():
+                try:
+                    # Double check connection state now that we have the lock
+                    if not self._is_connected:
+                        _LOGGER.debug("Device %s detected! Initiating connection...", self._mac)
+                        # Create task while still holding lock to prevent race condition
+                        asyncio.create_task(self.async_connect())
+                    else:
+                        _LOGGER.debug("Device %s already connected", self._mac)
+                finally:
+                    # Release lock if we're not proceeding with connection
+                    self._connection_lock.release()
             else:
                 _LOGGER.debug("Connection already in progress for %s", self._mac)
 

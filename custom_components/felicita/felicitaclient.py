@@ -39,9 +39,7 @@ MAX_RETRIES = 3
 class FelicitaClient:
     """Client for Felicita scale."""
 
-    def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, notify_callback: Callable
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, notify_callback: Callable) -> None:
         """Initialize client."""
         self._hass = hass
         self._entry = entry
@@ -57,11 +55,11 @@ class FelicitaClient:
         self._last_weight: float = 0
         self._last_weight_time: float = 0
         self._flow_rate: float = 0
-        self._ema_alpha = 0.1  # Smoothing factor for EMA (lower = smoother)
-        self._connection_lock = asyncio.Lock()  # Add connection lock
-        self._disconnect_event = asyncio.Event()  # Add disconnect event
+        self._ema_alpha = 0.1  # Smoothing factor for EMA
+        self._connection_lock = asyncio.Lock()
+        self._disconnect_event = asyncio.Event()
+        self._connecting: bool = False  # Prevent duplicate connection attempts
 
-        # Register BLE device detection callback without immediate connection attempt
         _LOGGER.debug("Registering BLE device detection callback for MAC: %s", self._mac)
         async_register_callback(
             hass,
@@ -107,116 +105,84 @@ class FelicitaClient:
 
     async def async_connect(self) -> None:
         """Connect to the scale with retry mechanism."""
-        async with self._connection_lock:  # Ensure only one connection attempt at a time
-            if self._is_connected:
+        async with self._connection_lock:
+            if self._is_connected or self._connecting:
                 return
+            self._connecting = True
+            try:
+                while self._connect_retries < MAX_RETRIES:
+                    try:
+                        # Clear disconnect event
+                        self._disconnect_event.clear()
 
-            while self._connect_retries < MAX_RETRIES:
-                try:
-                    # Clear any previous disconnect event
-                    self._disconnect_event.clear()
-                    
-                    # Wait for device to be discovered before attempting connection
-                    for _ in range(5):  # Try up to 5 times with 1-second intervals
-                        device = async_ble_device_from_address(self._hass, self._mac)
-                        if device:
-                            break
-                        await asyncio.sleep(1)
-                    
-                    if not device:
-                        self._is_connected = False
-                        _LOGGER.error("Could not find device with address %s after multiple attempts", self._mac)
-                        self._connect_retries += 1
-                        await asyncio.sleep(2 ** self._connect_retries)
-                        continue  # Try again if retries remain
+                        # Wait for device discovery
+                        device = None
+                        for _ in range(5):
+                            device = async_ble_device_from_address(self._hass, self._mac)
+                            if device:
+                                break
+                            await asyncio.sleep(1)
 
-                    self._device = device
-                    
-                    # Disconnect any existing client
-                    if self._client:
-                        try:
-                            await self._client.disconnect()
-                        except Exception:
-                            pass
-                    
-                    _LOGGER.debug("Attempting to connect to device %s", self._mac)
-                    async with BleakClient(
-                        device, 
-                        disconnected_callback=self._disconnected_callback,
-                        timeout=CONNECT_TIMEOUT
-                    ) as client:
+                        if not device:
+                            _LOGGER.error("Device with address %s not found after multiple attempts", self._mac)
+                            self._connect_retries += 1
+                            await asyncio.sleep(2 ** self._connect_retries)
+                            continue
+
+                        self._device = device
+
+                        # Disconnect existing client if necessary
+                        if self._client:
+                            try:
+                                await self._client.disconnect()
+                            except Exception:
+                                pass
+
+                        _LOGGER.debug("Attempting to connect to device %s", self._mac)
+                        client = BleakClient(device, disconnected_callback=self._disconnected_callback, timeout=CONNECT_TIMEOUT)
+                        await client.connect()
                         self._client = client
 
-                        # Verify services are available
-                        #if not client.services:
-                            #raise BleakError("Failed to retrieve services from the device")
-
-                        #services = client.services
-                        #if not any(service.uuid.startswith(FELICITA_SERVICE_UUID) for service in services):
-                            #raise BleakError("Felicita service not found")
-
-                        # Start notifications only after successful connection and service discovery
-                        await client.start_notify(
-                            FELICITA_CHAR_UUID, self._notification_callback
-                        )
-
+                        # Start notifications after successful connection
+                        await client.start_notify(FELICITA_CHAR_UUID, self._notification_callback)
                         self._is_connected = True
-                        self._connect_retries = 0  # Reset counter on successful connection
+                        self._connect_retries = 0
                         _LOGGER.debug("Successfully connected to device %s", self._mac)
-                        return  # Early return after successful connection
-
-                except Exception as error:
-                    _LOGGER.warning(
-                        "Connection attempt %s failed: %s", 
-                        self._connect_retries + 1, 
-                        str(error)
-                    )
-                    if self._client:
-                        try:
-                            await self._client.disconnect()
-                        except Exception:
-                            pass
-                    self._client = None
-                    self._is_connected = False
-                    self._connect_retries += 1
-                    
-                    if self._connect_retries >= MAX_RETRIES:
-                        _LOGGER.error("Failed to connect after %s attempts", MAX_RETRIES)
                         return
-                    
-                    # Exponential backoff between retries
-                    await asyncio.sleep(2 ** self._connect_retries)
 
-    async def _device_detected(self, device, advertisement_data):
+                    except Exception as error:
+                        _LOGGER.warning("Connection attempt %s failed: %s", self._connect_retries + 1, str(error))
+                        if self._client:
+                            try:
+                                await self._client.disconnect()
+                            except Exception:
+                                pass
+                        self._client = None
+                        self._is_connected = False
+                        self._connect_retries += 1
+
+                        if self._connect_retries >= MAX_RETRIES:
+                            _LOGGER.error("Failed to connect after %s attempts", MAX_RETRIES)
+                            return
+
+                        await asyncio.sleep(2 ** self._connect_retries)
+            finally:
+                self._connecting = False
+
+    async def _device_detected(self, device, advertisement_data) -> None:
         """Handle device detection and initiate connection."""
-        if not self._is_connected and device.address == self._mac:
-            # Try to acquire the lock without blocking
-            if await self._connection_lock.acquire():
-                try:
-                    # Double check connection state now that we have the lock
-                    if not self._is_connected:
-                        _LOGGER.debug("Device %s detected! Initiating connection...", self._mac)
-                        # Create task while still holding lock to prevent race condition
-                        asyncio.create_task(self.async_connect())
-                    else:
-                        _LOGGER.debug("Device %s already connected", self._mac)
-                finally:
-                    # Release lock if we're not proceeding with connection
-                    self._connection_lock.release()
-            else:
-                _LOGGER.debug("Connection already in progress for %s", self._mac)
+        if not self._is_connected and not self._connecting and device.address == self._mac:
+            _LOGGER.debug("Device %s detected! Initiating connection...", self._mac)
+            asyncio.create_task(self.async_connect())
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
         _LOGGER.debug("Device %s disconnected. Reconnection will be triggered by device detection.", self._mac)
         self._is_connected = False
         self._client = None
-        self._connect_retries = 0  # Reset retries to allow fresh connection attempts
+        self._connect_retries = 0  # Reset retries for fresh attempts
         self._disconnect_event.set()
-        
-        # Only notify if this wasn't triggered during a planned disconnect
-        if not self._connection_lock.locked():
-            self._notify_callback()
+        self._notify_callback()
 
     def _notification_callback(self, _: int, data: bytearray) -> None:
         """Handle notification from scale."""
@@ -225,35 +191,32 @@ class FelicitaClient:
                 _LOGGER.info("Received invalid data length: %s", len(data))
                 return
 
-            # Parse weight - bytes 3-9 contain weight digits
-            weight_bytes = data[3:9]
+            # Parse weight from bytes 3-9
             try:
-                # Convert ASCII values to actual digits (ASCII 48 = '0')
-                digits = [b - 48 for b in weight_bytes]
-                # Join all digits and convert to float, moving decimal point 2 places from right
-                weight_str = ''.join(str(d) for d in digits[:-2]) + '.' + ''.join(str(d) for d in digits[-2:])
-                self._weight = float(weight_str)
-                
-                # If the first digit is negative (after subtracting 48), 
-                # this indicates a negative value from the scale
-                if digits[0] < 0:
-                    self._weight = -self._weight
-                    
-            except ValueError as e:
+                raw_weight = data[3:9].decode('utf-8').strip()
+                if not raw_weight:
+                    raise ValueError("Empty weight data")
+                sign = -1 if raw_weight[0] == '-' else 1
+                weight_digits = raw_weight[1:] if sign == -1 else raw_weight
+                if len(weight_digits) < 3:
+                    raise ValueError("Insufficient digits in weight data")
+                weight_str = weight_digits[:-2] + '.' + weight_digits[-2:]
+                self._weight = sign * float(weight_str)
+            except Exception as e:
                 _LOGGER.warning("Failed to parse weight: %s", e)
                 return
 
-            # Parse battery with bounds checking
+            # Parse battery level (byte 15)
             battery_raw = data[15]
-            battery_percentage = ((battery_raw - MIN_BATTERY_LEVEL) / 
-                                (MAX_BATTERY_LEVEL - MIN_BATTERY_LEVEL)) * 100
-            if abs(battery_percentage - self._battery) > 5:  # Only update if change is significant
+            battery_percentage = ((battery_raw - MIN_BATTERY_LEVEL) /
+                                  (MAX_BATTERY_LEVEL - MIN_BATTERY_LEVEL)) * 100
+            if abs(battery_percentage - self._battery) > 5:
                 self._battery = max(0, min(100, round(battery_percentage)))
 
-            # Parse unit (bytes 9-11)
+            # Parse unit from bytes 9-11
             try:
                 unit = data[9:11].decode('utf-8').strip()
-                if unit in ['g', 'oz']:  # Add valid units here
+                if unit in ['g', 'oz']:
                     self._unit = unit
             except UnicodeDecodeError as e:
                 _LOGGER.warning("Failed to decode unit: %s", e)
@@ -264,14 +227,11 @@ class FelicitaClient:
                 time_diff = current_time - self._last_weight_time
                 weight_diff = self._weight - self._last_weight
                 if time_diff > 0:
-                    # Calculate new flow rate with exponential moving average
                     new_flow_rate = weight_diff / time_diff
                     self._flow_rate = round(
-                        (self._ema_alpha * new_flow_rate + 
-                         (1 - self._ema_alpha) * self._flow_rate),
-                        1  # Round to 1 decimal place
+                        self._ema_alpha * new_flow_rate + (1 - self._ema_alpha) * self._flow_rate,
+                        1
                     )
-            
             self._last_weight = self._weight
             self._last_weight_time = current_time
 
@@ -281,7 +241,7 @@ class FelicitaClient:
 
     async def async_disconnect(self) -> None:
         """Disconnect from device."""
-        async with self._connection_lock:  # Prevent reconnection attempts during planned disconnect
+        async with self._connection_lock:
             if self._client:
                 await self._client.disconnect()
             self._is_connected = False
@@ -289,11 +249,7 @@ class FelicitaClient:
 
     async def async_update(self) -> None:
         """Update data from device."""
-        # Only check if device is present, don't force connection
-        device_available = async_address_present(
-            self._hass, self._mac, connectable=True
-        )
-        
+        device_available = async_address_present(self._hass, self._mac, connectable=True)
         if not device_available:
             self._is_connected = False
             _LOGGER.debug("Device with MAC %s not available", self._mac)

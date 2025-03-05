@@ -190,16 +190,24 @@ class FelicitaClient:
     def _device_detected(self, device, advertisement_data):
         """Handle device detection and initiate connection."""
         if not self._is_connected and device.address == self._mac:
-            _LOGGER.debug("Device %s detected! Connecting...", self._mac)
-            asyncio.create_task(self.async_connect())
+            # Avoid multiple simultaneous connection attempts
+            if not self._connection_lock.locked():
+                _LOGGER.debug("Device %s detected! Initiating connection...", self._mac)
+                asyncio.create_task(self.async_connect())
+            else:
+                _LOGGER.debug("Connection already in progress for %s", self._mac)
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
+        _LOGGER.debug("Device %s disconnected. Reconnection will be triggered by device detection.", self._mac)
         self._is_connected = False
         self._client = None
-        self._connect_retries = 0
+        self._connect_retries = 0  # Reset retries to allow fresh connection attempts
         self._disconnect_event.set()
-        self._notify_callback()
+        
+        # Only notify if this wasn't triggered during a planned disconnect
+        if not self._connection_lock.locked():
+            self._notify_callback()
 
     def _notification_callback(self, _: int, data: bytearray) -> None:
         """Handle notification from scale."""
@@ -264,9 +272,11 @@ class FelicitaClient:
 
     async def async_disconnect(self) -> None:
         """Disconnect from device."""
-        if self._client:
-            await self._client.disconnect()
-        self._is_connected = False
+        async with self._connection_lock:  # Prevent reconnection attempts during planned disconnect
+            if self._client:
+                await self._client.disconnect()
+            self._is_connected = False
+            self._client = None
 
     async def async_update(self) -> None:
         """Update data from device."""

@@ -116,11 +116,19 @@ class FelicitaClient:
                     # Clear any previous disconnect event
                     self._disconnect_event.clear()
                     
-                    device = async_ble_device_from_address(self._hass, self._mac)
+                    # Wait for device to be discovered before attempting connection
+                    for _ in range(5):  # Try up to 5 times with 1-second intervals
+                        device = async_ble_device_from_address(self._hass, self._mac)
+                        if device:
+                            break
+                        await asyncio.sleep(1)
+                    
                     if not device:
                         self._is_connected = False
-                        _LOGGER.error("Could not find device with address %s", self._mac)
-                        return  # Early return if device not found
+                        _LOGGER.error("Could not find device with address %s after multiple attempts", self._mac)
+                        self._connect_retries += 1
+                        await asyncio.sleep(2 ** self._connect_retries)
+                        continue  # Try again if retries remain
 
                     self._device = device
                     
@@ -131,6 +139,7 @@ class FelicitaClient:
                         except Exception:
                             pass
                     
+                    _LOGGER.debug("Attempting to connect to device %s", self._mac)
                     async with BleakClient(
                         device, 
                         disconnected_callback=self._disconnected_callback,

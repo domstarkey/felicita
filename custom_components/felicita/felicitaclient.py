@@ -52,7 +52,7 @@ class FelicitaClient:
         self._last_weight: float = 0
         self._last_weight_time: float = 0
         self._flow_rate: float = 0
-        self._ema_alpha = 0.1  # Smoothing factor for EMA
+        self._ema_alpha = 0.4  # Smoothing factor for EMA
         self._connection_lock = asyncio.Lock()
         self._disconnect_event = asyncio.Event()
         self._stop_event = asyncio.Event()
@@ -184,44 +184,67 @@ class FelicitaClient:
             if len(data) != 18:
                 _LOGGER.info("Received invalid data length: %s", len(data))
                 return
-
-            # Parse weight from bytes 3-9.
+            
+            # Parse unit from bytes 9-11.
             try:
-                raw_weight = data[3:9].decode("utf-8").strip()
-                if not raw_weight:
-                    raise ValueError("Empty weight data")
-                sign = -1 if raw_weight[0] == "-" else 1
-                weight_digits = raw_weight[1:] if sign == -1 else raw_weight
-                if len(weight_digits) < 3:
+                unit = data[9:11].decode("utf-8").strip()
+                if unit in {"g", "oz"}:
+                    self._unit = unit
+                else:
+                    _LOGGER.warning("Unrecognized unit: %s", unit)
+            except UnicodeDecodeError as e:
+                _LOGGER.warning("Failed to decode unit: %s", e)
+
+            decimal_places = 3 if unit == "oz" else 2
+
+            mystery_bytes = data[12:14]
+            _LOGGER.debug("mystery_bytes: %s", mystery_bytes)
+
+            # Parse weight by subtracting 48 from each weight byte.
+            try:
+                weight_bytes = data[2:9]
+                # Check for negative sign.
+                sign = -1 if weight_bytes[0] == 45 else 1
+                digits = []
+                for b in weight_bytes[1:]:
+                    # Skip spaces if any.
+                    if b == 32:
+                        continue
+                    digit = b - 48
+                    if not (0 <= digit <= 9):
+                        raise ValueError("Invalid digit in weight data")
+                    digits.append(str(digit))
+                if len(digits) < 3:
                     raise ValueError("Insufficient digits in weight data")
-                weight_str = weight_digits[:-2] + "." + weight_digits[-2:]
+                # Insert decimal point before the last two digits.
+                weight_str = "".join(digits[:-decimal_places]) + "." + "".join(digits[-decimal_places:])
                 self._weight = sign * float(weight_str)
             except Exception as e:
                 _LOGGER.warning("Failed to parse weight: %s", e)
                 return
 
             # Parse battery (byte 15) with bounds checking.
-            battery_raw = data[15]
-            battery_percentage = ((battery_raw - MIN_BATTERY_LEVEL) / 
-                                  (MAX_BATTERY_LEVEL - MIN_BATTERY_LEVEL)) * 100
-            if abs(battery_percentage - self._battery) > 5:
-                self._battery = max(0, min(100, round(battery_percentage)))
-
-            # Parse unit from bytes 9-11.
             try:
-                unit = data[9:11].decode("utf-8").strip()
-                if unit in ["g", "oz"]:
-                    self._unit = unit
-            except UnicodeDecodeError as e:
-                _LOGGER.warning("Failed to decode unit: %s", e)
+                battery_raw = data[15]
+                battery_percentage = ((battery_raw - MIN_BATTERY_LEVEL) /
+                                    (MAX_BATTERY_LEVEL - MIN_BATTERY_LEVEL)) * 100
+                battery_percentage = max(0, min(100, round(battery_percentage)))
+                if abs(battery_percentage - self._battery) > 5:
+                    self._battery = battery_percentage
+            except Exception as e:
+                _LOGGER.warning("Failed to parse battery: %s", e)
+
 
             # Calculate flow rate (g/s).
             current_time = time()
             if self._last_weight_time > 0:
                 time_diff = current_time - self._last_weight_time
-                weight_diff = self._weight - self._last_weight
                 if time_diff > 0:
+                    weight_diff = self._weight - self._last_weight
                     new_flow_rate = weight_diff / time_diff
+                    # If weight is zero or very close to zero, gradually decay flow rate
+                    if abs(self._weight) < 0.1:  # threshold of 0.1g
+                        new_flow_rate = 0
                     self._flow_rate = round(
                         self._ema_alpha * new_flow_rate + (1 - self._ema_alpha) * self._flow_rate,
                         1
@@ -253,6 +276,8 @@ class FelicitaClient:
         """Tare the scale."""
         if self._client and self._is_connected:
             await self._client.write_gatt_char(FELICITA_CHAR_UUID, bytes([CMD_TARE]))
+            self._last_weight = self._weight
+            self._last_weight_time = 0
 
     async def async_start_timer(self) -> None:
         """Start the timer."""

@@ -163,11 +163,11 @@ class FelicitaClient:
         async with self._connection_lock:
             self._connecting = False
 
-    async def _device_detected(self, device, advertisement_data) -> None:
+    def _device_detected(self, device, advertisement_data) -> None:
         """Handle device detection and initiate connection if not active."""
         if not self._is_connected and not self._connecting and device.address == self._mac:
             _LOGGER.debug("Device %s detected! Initiating connection...", self._mac)
-            await self._hass.async_create_task(self.async_connect())
+            self._hass.async_create_task(self.async_connect())
 
     def _disconnected_callback(self, _: BleakClient) -> None:
         """Handle disconnection."""
